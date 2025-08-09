@@ -17,16 +17,15 @@ except ModuleNotFoundError:
     print("Warning: Install module 'colored_traceback' for better tracebacks", file=sys.stderr)
 
 try:
-    import assignhooks  # type: ignore
-
     #assignhooks.instrument.debug = True
     #assignhooks.patch.debug = True
     #assignhooks.transformer.debug = True
     import alt_transformer
-    assignhooks.transformer.AssignTransformer.visit_Assign = alt_transformer.visit_Assign
+    import assignhooks  # type: ignore
+    assignhooks.transformer.AssignTransformer.visit_Assign = alt_transformer.visit_Assign # type: ignore
 except ModuleNotFoundError:
-    print("Warning: Install module 'assignhooks' for better variable names", file=sys.stderr)
-    assignhooks = None
+    print("Warning: Module 'assignhooks' failed to initialize", file=sys.stderr)
+    assignhooks = None # type: ignore
 
 import lib_carotte
 
@@ -46,7 +45,7 @@ def process(module_file: str, output_filename: str | None = None) -> None:
         print(f"Could not load file '{module_file}'", file=sys.stderr)
         sys.exit(1)
     if assignhooks is not None:
-        assignhooks.patch_module(module)
+        assignhooks.patch_module(module) # type: ignore
     lib_carotte.reset()
     module.main() # type: ignore
 

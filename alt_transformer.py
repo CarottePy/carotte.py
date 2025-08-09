@@ -34,7 +34,7 @@ def gen_assign_checker_ast(node): # type: ignore
                         func=ast.Name(id='hasattr', ctx=ast.Load()),
                         args=[
                             assignhooks.transformer.as_load(lhs_target),
-                            ast.Str(s='__assignpost__'),
+                            ast.Constant('__assignpost__'),
                         ],
                         keywords=[],
                         starargs=None,
@@ -49,8 +49,8 @@ def gen_assign_checker_ast(node): # type: ignore
                                     attr='__assignpost__',
                                     ctx=ast.Load()),
                                 args=[
-                                    ast.Str(s=lhs_target.id),         # lhs_name
-                                    ast.Str(s=assignhooks.transformer.node_name(node.value))  # rhs_name
+                                    ast.Constant(lhs_target.id),         # lhs_name
+                                    ast.Constant(assignhooks.transformer.node_name(node.value))  # rhs_name
                                 ],
                                 keywords=[]
                             )
@@ -66,7 +66,7 @@ def gen_assign_checker_ast(node): # type: ignore
                             func=ast.Name(id='hasattr', ctx=ast.Load()),
                             args=[
                                 ast.Name(id=var.id, ctx=ast.Load()),
-                                ast.Str(s='__assignpost__'),
+                                ast.Constant('__assignpost__'),
                             ],
                             keywords=[],
                             starargs=None,
@@ -81,8 +81,8 @@ def gen_assign_checker_ast(node): # type: ignore
                                         attr='__assignpost__',
                                         ctx=ast.Load()),
                                     args=[
-                                        ast.Str(s=var.id),         # lhs_name
-                                        ast.Str(s=assignhooks.transformer.node_name(node.value))  # rhs_name
+                                        ast.Constant(var.id),         # lhs_name
+                                        ast.Constant(assignhooks.transformer.node_name(node.value))  # rhs_name
                                     ],
                                     keywords=[]
                                 )

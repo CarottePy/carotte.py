@@ -37,7 +37,7 @@ check_python() {
 }
 
 readarray -d '' python_files < \
-    <(find . -name "*.py" -not -path "./tutorial/*" -type f -print0)
+    <(find . -name "*.py" -not -path "./tutorial/*" -not -path "./assignhooks/*" -type f -print0)
 check_python "${python_files[@]}"
 
 exit "${STATUS}"
