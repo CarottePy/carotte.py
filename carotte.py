@@ -36,6 +36,7 @@ if sys.version_info < MIN_PYTHON:
 
 def process(module_file: str, output_filename: str | None = None) -> None:
     '''Process a carotte.py input python file and build its netlist'''
+    lib_carotte.reset()
     module_dir, module_name = os.path.split(os.path.abspath(module_file))
     sys.path.append(module_dir)
     module_name = re.sub("\\.py$", "", module_name)
@@ -46,7 +47,6 @@ def process(module_file: str, output_filename: str | None = None) -> None:
         sys.exit(1)
     if assignhooks is not None:
         assignhooks.patch_module(module) # type: ignore
-    lib_carotte.reset()
     module.main() # type: ignore
 
     netlist = lib_carotte.get_netlist()
