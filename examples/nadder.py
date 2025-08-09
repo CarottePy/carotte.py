@@ -37,3 +37,4 @@ def main() -> None:
     (result, out_carry) = adder(a, b, c)
     result.set_as_output("result")
     out_carry.set_as_output("out_carry")
+    Verif.AssertEqual(result, Verif.BVAdd(a, Verif.BVAdd(b, Verif.BVZeroExtend(c, n))))

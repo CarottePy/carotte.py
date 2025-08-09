@@ -32,7 +32,8 @@ if sys.version_info < MIN_PYTHON:
     print("Python %s.%s or later is required" % MIN_PYTHON, file=sys.stderr) # pylint: disable=C0209
     sys.exit(1)
 
-def process(module_file: str, output_filename: str | None, smart_names: bool) -> None:
+def process(module_file: str, output_filename: str | None, smart_names: bool,
+            smt2_filename: str | None, model_depth: int) -> None:
     '''Process a carotte.py input python file and build its netlist'''
     lib_carotte.reset()
     module_dir, module_name = os.path.split(os.path.abspath(module_file))
@@ -54,16 +55,23 @@ def process(module_file: str, output_filename: str | None, smart_names: bool) ->
         with open(output_filename, 'w', encoding='utf-8') as f:
             f.write(netlist)
 
+    if smt2_filename is not None:
+        model = lib_carotte.get_smtlib2_model(model_depth)
+        with open(smt2_filename, 'w', encoding='utf-8') as f:
+            f.write(model)
+
 def main() -> None:
     '''Entry point for carotte.py'''
     parser = argparse.ArgumentParser(description='carotte.py DSL')
     parser.add_argument("module_file", nargs=1)
     parser.add_argument('-o', '--output-file', help='Netlist output file')
+    parser.add_argument('-s', '--smtlib2-file', help='SMT2 output file')
+    parser.add_argument('-d', '--model-depth', help="Depth of the SMT2 model", type=int, default=3)
     parser.add_argument('--smart-names', help="Smart variable names in the netlist (on by default)",
                         action=argparse.BooleanOptionalAction)
     parser.set_defaults(smart_names=True)
     args = parser.parse_args()
-    process(args.module_file[0], args.output_file, args.smart_names)
+    process(args.module_file[0], args.output_file, args.smart_names, args.smtlib2_file, args.model_depth)
 
 if __name__ == "__main__":
     main()
