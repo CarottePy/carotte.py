@@ -7,7 +7,7 @@ import ast
 
 __all__ = [
     'gen_assign_name_checker_ast',
-    'gen_assign_call_checker_ast',
+    'gen_assign_generic_checker_ast',
     'AssignTransformer'
 ]
 
@@ -80,6 +80,49 @@ def as_load(n):
         print('as_load new_n=', ast.dump(new_n))
     return new_n
 
+def core_assign(node, lhs_target, rhs_obj_name):
+    if isinstance(node, ast.Assign):
+        return ast.Assign(
+            targets=[as_store(lhs_target)],
+            value=ast.Call(
+                func=ast.Attribute(
+                    value=ast.Name(id=rhs_obj_name, ctx=ast.Load()),
+                    attr='__assignpre__',
+                    ctx=ast.Load()
+                ),
+                args=[
+                    ast.Constant(node_name(lhs_target)),  # lhs_name
+                    ast.Constant(rhs_obj_name),           # rhs_name
+                    node.value                            # rhs_value
+                    ],
+                keywords=[],
+                starargs=None,
+                kwargs=None
+            )
+        )
+    elif isinstance(node, ast.AnnAssign):
+        return ast.AnnAssign(
+            targets=[as_store(lhs_target)],
+            annotation=node.annotation,
+            value=ast.Call(
+                func=ast.Attribute(
+                    value=ast.Name(id=rhs_obj_name, ctx=ast.Load()),
+                    attr='__assignpre__',
+                    ctx=ast.Load()
+                ),
+                args=[
+                    ast.Constant(node_name(lhs_target)),  # lhs_name
+                    ast.Constant(rhs_obj_name),           # rhs_name
+                    node.value                            # rhs_value
+                    ],
+                keywords=[],
+                starargs=None,
+                kwargs=None
+            ),
+            simple=node.simple
+        )
+    else:
+        raise ValueError(f"core_assign, don't know how to handle {ast.dump(node)}")
 
 def gen_assign_name_checker_ast(node):
 
@@ -90,6 +133,15 @@ def gen_assign_name_checker_ast(node):
         print(dump_tree(node))
 
     rhs_obj_name = node.value.id
+
+    if isinstance(node, ast.Assign):
+        node_targets = node.targets
+    elif isinstance(node, ast.AnnAssign):
+        node_targets = [ node.target ]
+    else:
+        if debug:
+            print("warning: gen_assign_name_checker_ast, don't know how to handle", ast.dump(node))
+        return node
 
     new_node = ast.If(
         test=ast.Constant(value=True, kind=None),
@@ -107,52 +159,43 @@ def gen_assign_name_checker_ast(node):
                 kwargs=None
             ),
             body=[
-                ast.Assign(
-                    targets=[as_store(lhs_target)],
-                    value=ast.Call(
-                        func=ast.Attribute(
-                            value=ast.Name(id=rhs_obj_name, ctx=ast.Load()),
-                            attr='__assignpre__',
-                            ctx=ast.Load()
-                        ),
-                        args=[
-                            ast.Constant(node_name(lhs_target)),  # lhs_name
-                            ast.Constant(rhs_obj_name),           # rhs_name
-                            node.value                         # rhs_value
-                         ],
-                        keywords=[],
-                        starargs=None,
-                        kwargs=None
-                    )
-                ) for lhs_target in node.targets],
+                core_assign(node, lhs_target, rhs_obj_name) for lhs_target in node_targets
+            ],
             orelse=[node]
           ),
           ast.If(
-            test=ast.Call(
-                func=ast.Name(id='hasattr', ctx=ast.Load()),
-                args=[
-                    as_load(node.targets[0]),
-                    ast.Constant('__assignpost__'),
-                ],
-                keywords=[],
-                starargs=None,
-                kwargs=None
-            ),
+            test=ast.Constant(value=True, kind=None),
+            orelse=[],
             body=[
-              ast.Expr(
-                value=ast.Call(
-                    func=ast.Attribute(
-                              value=as_load(lhs_target),
-                              attr='__assignpost__',
-                              ctx=ast.Load()),
-                    args=[
-                        ast.Constant(node_name(lhs_target)),  # lhs_name
-                        ast.Constant(node_name(node.value))   # rhs_name
+                ast.If(
+                    test=ast.Call(
+                        func=ast.Name(id='hasattr', ctx=ast.Load()),
+                        args=[
+                            as_load(lhs_target),
+                            ast.Constant('__assignpost__'),
+                        ],
+                        keywords=[],
+                        starargs=None,
+                        kwargs=None
+                    ),
+                    body=[
+                        ast.Expr(
+                            value=ast.Call(
+                                func=ast.Attribute(
+                                        value=as_load(lhs_target),
+                                        attr='__assignpost__',
+                                        ctx=ast.Load()),
+                                args=[
+                                    ast.Constant(node_name(lhs_target)),  # lhs_name
+                                    ast.Constant(node_name(node.value))   # rhs_name
+                                ],
+                                keywords=[]
+                            )
+                        )
                     ],
-                    keywords=[]
+                    orelse=[]
                 )
-              ) for lhs_target in node.targets],
-            orelse=[]
+            for lhs_target in node_targets]
           )
         ]
     )
@@ -162,54 +205,101 @@ def gen_assign_name_checker_ast(node):
     return new_node
 
 
-def gen_assign_call_checker_ast(node):
+def gen_assign_generic_checker_ast(node):
 
-    assert isinstance(node.value, ast.Call)
+    assert isinstance(node.value, (ast.BinOp, ast.Call, ast.UnaryOp))
 
-    if not isinstance(node.targets[0], ast.Name):
+    if isinstance(node, ast.Assign):
+        node_targets = node.targets
+    elif isinstance(node, ast.AnnAssign):
+        node_targets = [ node.target ]
+    else:
         if debug:
-            print('old_node: x=y() case')
-            print(dump_tree(node))
-            print('do NOT know how to handle node')
+            print("warning: gen_assign_name_checker_ast, don't know how to handle", ast.dump(node))
         return node
 
+    for lhs_target in node_targets:
+        if not isinstance(lhs_target, ast.Name) and not isinstance(lhs_target, ast.Tuple):
+            if debug:
+                print('old_node: generic case')
+                print(dump_tree(node))
+                print('do NOT know how to handle node')
+            return node
+
     if debug:
-        print('old_node: x=y() case')
+        print('old_node: generic case')
         print(dump_tree(node))
+
+    body = [node]
+    for lhs_target in node_targets:
+        if isinstance(lhs_target, ast.Name):
+            body.append(
+                ast.If(
+                    test=ast.Call(
+                        func=ast.Name(id='hasattr', ctx=ast.Load()),
+                        args=[
+                            as_load(lhs_target),
+                            ast.Constant('__assignpost__'),
+                        ],
+                        keywords=[],
+                        starargs=None,
+                        kwargs=None
+                    ),
+                    orelse=[],
+                    body=[
+                        ast.Expr(
+                            value=ast.Call(
+                                func=ast.Attribute(
+                                    value=as_load(lhs_target),
+                                    attr='__assignpost__',
+                                    ctx=ast.Load()),
+                                args=[
+                                    ast.Constant(lhs_target.id),         # lhs_name
+                                    ast.Constant(node_name(node.value))  # rhs_name
+                                ],
+                                keywords=[]
+                            )
+                        )
+                        ]
+                )
+            )
+        elif isinstance(lhs_target, ast.Tuple):
+            for var in lhs_target.elts:
+                body.append(
+                    ast.If(
+                        test=ast.Call(
+                            func=ast.Name(id='hasattr', ctx=ast.Load()),
+                            args=[
+                                ast.Name(id=var.id, ctx=ast.Load()),
+                                ast.Constant('__assignpost__'),
+                            ],
+                            keywords=[],
+                            starargs=None,
+                            kwargs=None
+                        ),
+                        orelse=[],
+                        body=[
+                            ast.Expr(
+                                value=ast.Call(
+                                    func=ast.Attribute(
+                                        value=ast.Name(id=var.id, ctx=ast.Load()),
+                                        attr='__assignpost__',
+                                        ctx=ast.Load()),
+                                    args=[
+                                        ast.Constant(var.id),         # lhs_name
+                                        ast.Constant(node_name(node.value))  # rhs_name
+                                    ],
+                                    keywords=[]
+                                )
+                            )
+                        ]
+                    )
+                )
 
     new_node = ast.If(
         test=ast.Constant(value=True, kind=None),
         orelse=[],
-        body=[
-            node,
-            ast.If(
-              test=ast.Call(
-                func=ast.Name(id='hasattr', ctx=ast.Load()),
-                args=[
-                    ast.Name(id=node.targets[0].id, ctx=ast.Load()),
-                    ast.Constant('__assignpost__'),
-                ],
-                keywords=[],
-                starargs=None,
-                kwargs=None
-              ),
-              orelse=[],
-              body=[
-                ast.Expr(
-                    value=ast.Call(
-                        func=ast.Attribute(
-                              value=ast.Name(id=lhs_target.id, ctx=ast.Load()),
-                              attr='__assignpost__',
-                              ctx=ast.Load()),
-                        args=[
-                            ast.Constant(lhs_target.id),         # lhs_name
-                            ast.Constant(node_name(node.value))  # rhs_name
-                        ],
-                        keywords=[]
-                    )
-                ) for lhs_target in node.targets]
-            )
-        ]
+        body=body
     )
     if debug:
         print('new_node:')
@@ -217,21 +307,29 @@ def gen_assign_call_checker_ast(node):
     return new_node
 
 
+def gen_assign_dispatch(node):
+    new_node = None
+    if isinstance(node.value, ast.Name):
+        new_node = gen_assign_name_checker_ast(node)
+    elif isinstance(node.value, (ast.BinOp, ast.Call, ast.UnaryOp)):
+        new_node = gen_assign_generic_checker_ast(node)
+
+    if new_node is not None:
+        ast.copy_location(new_node, node)
+        ast.fix_missing_locations(new_node)
+        return new_node
+
+    return node
+
 class AssignTransformer(ast.NodeTransformer):
     def generic_visit(self, node):
         ast.NodeTransformer.generic_visit(self, node)
         return node
 
     def visit_Assign(self, node):
-        new_node = None
-        if isinstance(node.value, ast.Name):
-            new_node = gen_assign_name_checker_ast(node)
-        elif isinstance(node.value, ast.Call):
-            new_node = gen_assign_call_checker_ast(node)
+        return gen_assign_dispatch(node)
 
-        if new_node is not None:
-            ast.copy_location(new_node, node)
-            ast.fix_missing_locations(new_node)
-            return new_node
-
-        return node
+    def visit_AnnAssign(self, node):
+        if not hasattr(node, "value"):
+            return node # Annotation only
+        return gen_assign_dispatch(node)

@@ -20,16 +20,14 @@ try:
     #assignhooks.instrument.debug = True
     #assignhooks.patch.debug = True
     #assignhooks.transformer.debug = True
-    import alt_transformer
     import assignhooks  # type: ignore
-    assignhooks.transformer.AssignTransformer.visit_Assign = alt_transformer.visit_Assign # type: ignore
 except ModuleNotFoundError:
     print("Warning: Module 'assignhooks' failed to initialize", file=sys.stderr)
     assignhooks = None # type: ignore
 
 import lib_carotte
 
-MIN_PYTHON = (3, 8)
+MIN_PYTHON = (3, 10)
 if sys.version_info < MIN_PYTHON:
     print("Python %s.%s or later is required" % MIN_PYTHON, file=sys.stderr) # pylint: disable=C0209
     sys.exit(1)
