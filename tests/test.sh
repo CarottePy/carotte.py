@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
 
 for test_file in *.py; do
     echo "$test_file"
