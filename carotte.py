@@ -32,7 +32,7 @@ if sys.version_info < MIN_PYTHON:
     print("Python %s.%s or later is required" % MIN_PYTHON, file=sys.stderr) # pylint: disable=C0209
     sys.exit(1)
 
-def process(module_file: str, output_filename: str | None = None) -> None:
+def process(module_file: str, output_filename: str | None, smart_names: bool) -> None:
     '''Process a carotte.py input python file and build its netlist'''
     lib_carotte.reset()
     module_dir, module_name = os.path.split(os.path.abspath(module_file))
@@ -43,7 +43,7 @@ def process(module_file: str, output_filename: str | None = None) -> None:
     except ModuleNotFoundError:
         print(f"Could not load file '{module_file}'", file=sys.stderr)
         sys.exit(1)
-    if assignhooks is not None:
+    if smart_names and assignhooks is not None:
         assignhooks.patch_module(module) # type: ignore
     module.main() # type: ignore
 
@@ -59,8 +59,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description='carotte.py DSL')
     parser.add_argument("module_file", nargs=1)
     parser.add_argument('-o', '--output-file', help='Netlist output file')
+    parser.add_argument('--smart-names', help="Smart variable names in the netlist (on by default)",
+                        action=argparse.BooleanOptionalAction)
+    parser.set_defaults(smart_names=True)
     args = parser.parse_args()
-    process(args.module_file[0], args.output_file)
+    process(args.module_file[0], args.output_file, args.smart_names)
 
 if __name__ == "__main__":
     main()
