@@ -103,7 +103,7 @@ class Variable(typing.Sequence['Variable']):
 
     def get_smt2_decl(self, model_depth: int) -> str:
         '''Returns the variable declaration in SMTLIB2 format'''
-        return "".join(f"(declare-const {"@"*i}{self.name} (_ BitVec {self.bus_size}))\n" for i in range(model_depth))
+        return "".join(f"(declare-const {'@'*i}{self.name} (_ BitVec {self.bus_size}))\n" for i in range(model_depth))
     def get_smt2_equation(self, depth: int, max_depth: int) -> str:
         '''Returns the variable declaration in SMTLIB2 format'''
         raise ValueError("Should be specialized by sub-classes")
@@ -173,7 +173,7 @@ VariableOrDefer = typing.Union[Variable, Defer]
 def _smt2_name(x: VariableOrDefer | str, depth: int) -> str:
     if not isinstance(x, str):
         x = x.name
-    return f"{"@"*depth}{x}"
+    return f"{'@'*depth}{x}"
 
 def _smt2_BV2Bool(x: VariableOrDefer, depth: int) -> str:
     assert x.bus_size == 1
@@ -327,7 +327,7 @@ class ROM(EquationVariable):
     def get_smt2_equation(self, depth: int, max_depth: int) -> str:
         r = f"(declare-const {self.verif_rom_name} (Array (_ BitVec {self.addr_size}) (_ BitVec {self.word_size})))\n"
         d = f"(assert (= {_smt2_name(self, depth)} (select {self.verif_rom_name} {_smt2_name(self.read_addr, depth)})))"
-        return f"{(r if depth == 0 else "")}{d}\n"
+        return f"{(r if depth == 0 else '')}{d}\n"
 
 class RAM(EquationVariable):
     '''Netlist RAM'''
