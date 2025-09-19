@@ -671,20 +671,37 @@ def _undefer() -> None:
         for defer in list(_unevaluated_defer_set):
             defer.get_val()
 
-def get_netlist() -> str:
+def get_netlist(prune:bool = False) -> str:
     '''Get the netlist in string form'''
 
     _undefer()
 
     old_lens = (len(_input_list), len(_output_list), len(_equation_list))
+    outputs = [x.name for x in _output_list]
+    nl_vars = [x.get_full_name() for x in _input_list + _equation_list if x.in_netlist]
+    equs = [str(x) for x in _equation_list if x.in_netlist]
+
+    if prune: # Pruner purposedly badly written
+        ocoacc: set[str] = set()
+        coacc = set(outputs)
+        while ocoacc != coacc:
+            ocoacc = coacc.copy()
+            for equ in equs:
+                out, right = equ.split(" = ")
+                ins = right.split(" ")[1:]
+                if out in coacc:
+                    for x in ins:
+                        coacc.add(x)
+        nl_vars = [var for var in nl_vars if var.split(":")[0] in coacc]
+        equs = [equ for equ in equs if equ.split(" = ")[0] in coacc]
 
     netlist = (
         ""
-        + "INPUT " + ", ".join(x.name for x in _input_list) + "\n"
-        + "OUTPUT " + ", ".join(x.name for x in _output_list) + "\n"
-        + "VAR " + ", ".join(x.get_full_name() for x in _input_list + _equation_list if x.in_netlist) + "\n"
+        + ("INPUT " + ", ".join(x.name for x in _input_list)).rstrip() + "\n"
+        + ("OUTPUT " + ", ".join(outputs)).rstrip() + "\n"
+        + "VAR " + ", ".join(nl_vars)+ "\n"
         + "IN" + "\n"
-        + "".join(str(x) + "\n" for x in _equation_list if x.in_netlist)
+        + "".join(equ + "\n" for equ in equs)
     )
 
     # Sanity check

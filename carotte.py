@@ -33,7 +33,7 @@ if sys.version_info < MIN_PYTHON:
     sys.exit(1)
 
 def process(module_file: str, output_filename: str | None, smart_names: bool,
-            smt2_filename: str | None, model_depth: int) -> None:
+            smt2_filename: str | None, model_depth: int, prune: bool) -> None:
     '''Process a carotte.py input python file and build its netlist'''
     lib_carotte.reset()
     module_dir, module_name = os.path.split(os.path.abspath(module_file))
@@ -48,7 +48,7 @@ def process(module_file: str, output_filename: str | None, smart_names: bool,
         assignhooks.patch_module(module) # type: ignore
     module.main() # type: ignore
 
-    netlist = lib_carotte.get_netlist()
+    netlist = lib_carotte.get_netlist(prune=prune)
     if output_filename is None:
         print(netlist, end='')
     else:
@@ -67,11 +67,14 @@ def main() -> None:
     parser.add_argument('-o', '--output-file', help='Netlist output file')
     parser.add_argument('-s', '--smtlib2-file', help='SMT2 output file')
     parser.add_argument('-d', '--model-depth', help="Depth of the SMT2 model", type=int, default=3)
+    parser.add_argument('-p', '--prune', help='Keep only co-accessible variables',
+                        action=argparse.BooleanOptionalAction)
     parser.add_argument('--smart-names', help="Smart variable names in the netlist (on by default)",
                         action=argparse.BooleanOptionalAction)
+    parser.set_defaults(prune=False)
     parser.set_defaults(smart_names=True)
     args = parser.parse_args()
-    process(args.module_file[0], args.output_file, args.smart_names, args.smtlib2_file, args.model_depth)
+    process(args.module_file[0], args.output_file, args.smart_names, args.smtlib2_file, args.model_depth, args.prune)
 
 if __name__ == "__main__":
     main()
