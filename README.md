@@ -28,4 +28,4 @@ Call `allow_ribbon_logic_operations(True)` to enable this feature.
 ### License
 
 Most of this project is distributed under Creative Commons Zero v1.0 Universal (CC0-1.0). See `LICENSE` file.
-`assignhooks` and `alt_transformer.py` are distributed under MIT License (MIT).
+`assignhooks` is distributed under MIT License (MIT).

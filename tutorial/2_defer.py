@@ -37,7 +37,7 @@ def main():
     c.set_as_output("c")
 
 # Expected output:
-# INPUT 
+# INPUT
 # OUTPUT o, c
 # VAR o, c
 # IN
