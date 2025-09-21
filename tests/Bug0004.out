@@ -1,5 +1,5 @@
-INPUT 
-OUTPUT 
+INPUT
+OUTPUT
 VAR _l_0, reg0
 IN
 _l_0 = SELECT 0 reg0

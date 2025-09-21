@@ -1,5 +1,5 @@
-INPUT 
-OUTPUT 
+INPUT
+OUTPUT
 VAR reg0, _l_1, _reg0_sel_0
 IN
 reg0 = REG _l_1
