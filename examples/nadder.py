@@ -38,3 +38,6 @@ def main() -> None:
     result.set_as_output("result")
     out_carry.set_as_output("out_carry")
     Verif.AssertEqual(result, Verif.BVAdd(a, Verif.BVAdd(b, Verif.BVZeroExtend(c, n))))
+    (result_alt, out_carry_alt) = adder_alt(a, b, c)
+    Verif.AssertEqual(result, result_alt)
+    Verif.AssertEqual(out_carry, out_carry_alt)

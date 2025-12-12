@@ -6,6 +6,7 @@ disable=
     R0901,
     R0903,
     R0913,
+    R0917,
 
 [FORMAT]
 max-line-length=120

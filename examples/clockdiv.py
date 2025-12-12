@@ -12,4 +12,4 @@ def main() -> None:
     o.set_as_output("o")
     for x in [o, c]:
         Verif.AssertEqual(Not(x), Reg(Reg(x)))
-        Verif.Assert(Verif.Imply(Verif.Equal(Reg(Reg(x)), Not(Reg(x))), Verif.Equal(Reg(x), x)))
+        Verif.AssertImply(Verif.Equal(Reg(Reg(x)), Not(Reg(x))), Verif.Equal(Reg(x), x))

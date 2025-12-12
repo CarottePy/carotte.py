@@ -3,6 +3,7 @@
 
 '''Carotte library internals'''
 
+import inspect
 import sys
 import typing
 
@@ -79,6 +80,9 @@ class Variable(typing.Sequence['Variable']):
         if "@" in name:
             # Used in STMLIB2 output for previous values in registers
             raise ValueError("'@' in variable names are not allowed. Have '{name}'.")
+        if name == "_":
+            # Invalid name in STMLIB2 output
+            raise ValueError("Variable cannot be named '_'")
 
     def rename(self, new_name: str, autogen_name: bool = False) -> None:
         '''Rename the variable; can fail'''
@@ -103,7 +107,12 @@ class Variable(typing.Sequence['Variable']):
 
     def get_smt2_decl(self, model_depth: int) -> str:
         '''Returns the variable declaration in SMTLIB2 format'''
-        return "".join(f"(declare-const {'@'*i}{self.name} (_ BitVec {self.bus_size}))\n" for i in range(model_depth))
+        match self.bus_size:
+            case -1:
+                decl_type = "(_ Int)"
+            case _:
+                decl_type = f"(_ BitVec {self.bus_size})"
+        return "".join(f"(declare-const {'@'*i}{self.name} {decl_type})\n" for i in range(model_depth))
     def get_smt2_equation(self, depth: int, max_depth: int) -> str:
         '''Returns the variable declaration in SMTLIB2 format'''
         raise ValueError("Should be specialized by sub-classes")
@@ -307,8 +316,8 @@ class Mux(EquationVariable):
     def __str__(self) -> str:
         return f"{self.name} = MUX {self.choice.name} {self.a.name} {self.b.name}"
     def get_smt2_equation(self, depth: int, max_depth: int) -> str:
-        right = f"(ite (= {self.choice} #b0) {_smt2_name(self.a, depth)} {_smt2_name(self.b, depth)})"
-        return f"(assert (= {_smt2_name(self, depth)} {right}))\n"
+        rhs = f"(ite (= {_smt2_name(self.choice, depth)} #b0) {_smt2_name(self.a, depth)} {_smt2_name(self.b, depth)})"
+        return f"(assert (= {_smt2_name(self, depth)} {rhs}))\n"
 
 class ROM(EquationVariable):
     '''Netlist ROM'''
@@ -447,11 +456,14 @@ class Verif:
 
         def get_smt2_equation(self, depth: int, max_depth: int) -> str:
             if self.unop_name_smtlib2 == "":
-                raise ValueError("Invalid unnop name for SMTLIB2")
+                raise ValueError("Invalid unop name for SMTLIB2")
             if self.unop_name_smtlib2 == "PRE":
                 if depth >= max_depth:
                     return ""
                 return f"(assert (= {_smt2_name(self, depth)} {_smt2_name(self.x, depth+1)}))\n"
+            if self.unop_name_smtlib2 == "abs":
+                if self.x.bus_size != -1:
+                    raise ValueError(f"Operand '{self.x.name}' must be an integer variable.")
             return f"(assert (= {_smt2_name(self, depth)} ({self.unop_name_smtlib2} {_smt2_name(self.x, depth)})))\n"
 
     class BVNot(_Unop):
@@ -459,7 +471,10 @@ class Verif:
         unop_name_smtlib2 = "bvnot"
     class BVNeg(_Unop):
         '''SMTLIB2 bit-vector NEG'''
-        unop_name_smtlib2 = "bvnet"
+        unop_name_smtlib2 = "bvneg"
+    class IntegerAbs(_Unop):
+        '''SMTLIB2 integer absolute value'''
+        unop_name_smtlib2 = "abs"
     class Pre(_Unop):
         '''Value from the previous clock-cycle'''
         unop_name_smtlib2 = "PRE"
@@ -474,6 +489,12 @@ class Verif:
                 if lhs.bus_size != 1:
                     raise ValueError(
                         f"Implication parameters must be boolean-like. '{lhs.name}' has bus size {lhs.bus_size}."
+                    )
+            if self.binop_name_smtlib2 in ["+", "-", "*", "/"]:
+                if lhs.bus_size != -1:
+                    raise ValueError(
+                        f"Parameters for '{self.binop_name_smtlib2}' must be integer-like."
+                        " '{lhs.name}' has bus size {lhs.bus_size}."
                     )
             match self.binop_name_smtlib2:
                 case "=" | "<" | "<=" | ">" | ">=" | "=>":
@@ -560,6 +581,19 @@ class Verif:
         '''SMTLIB2 bit-vector signed greater'''
         binop_name_smtlib2 = "bvsgt"
 
+    class IntegerAdd(_Binop):
+        '''SMTLIB2 integer ADD'''
+        binop_name_smtlib2 = "+"
+    class IntegerSub(_Binop):
+        '''SMTLIB2 integer SUB'''
+        binop_name_smtlib2 = "-"
+    class IntegerMul(_Binop):
+        '''SMTLIB2 integer MUL'''
+        binop_name_smtlib2 = "*"
+    class IntegerDiv(_Binop):
+        '''SMTLIB2 integer DIV'''
+        binop_name_smtlib2 = "/"
+
     class Equal(_Binop):
         '''SMTLIB2 Equality'''
         binop_name_smtlib2 = "="
@@ -594,17 +628,17 @@ class Verif:
             return f"(assert (= {_smt2_name(self, depth)} {right}))\n"
 
     class BV2Int(_VerifVariable):
-        '''SMTLIB2 bit-vector bit-vector to integer'''
+        '''SMTLIB2 bit-vector to integer'''
         def __init__(self, x: VariableOrDefer):
             if x.bus_size < 1:
                 raise ValueError(f"Operand '{x.name}' must be a bit-vector variable.")
             super().__init__(bus_size=-1)
             self.x = x
         def get_smt2_equation(self, depth: int, max_depth: int) -> str:
-            return f"(assert (= {_smt2_name(self, depth)} (bv2int {_smt2_name(self.x, depth)})))\n"
+            return f"(assert (= {_smt2_name(self, depth)} (sbv_to_int {_smt2_name(self.x, depth)})))\n"
 
     class Int2BV(_VerifVariable):
-        '''SMTLIB2 bit-vector bit-vector to integer'''
+        '''SMTLIB2 integer to bit-vector'''
         def __init__(self, bus_size: int, x: VariableOrDefer):
             if x.bus_size != -1:
                 raise ValueError(f"Operand '{x.name}' must be an integer variable.")
@@ -613,18 +647,32 @@ class Verif:
         def get_smt2_equation(self, depth: int, max_depth: int) -> str:
             return f"(assert (= {_smt2_name(self, depth)} ((_ int2bv {self.bus_size}) {_smt2_name(self.x, depth)})))\n"
 
+    class IntegerConstant(_VerifVariable):
+        '''SMTLIB2 integer constant'''
+        def __init__(self, constant: int):
+            super().__init__(bus_size=-1)
+            self.constant = constant
+        def get_smt2_equation(self, depth: int, max_depth: int) -> str:
+            return f"(assert (= {_smt2_name(self, depth)} {self.constant}))\n"
+
     class Assert:
         '''SMTLIB2 assertions'''
         def __init__(self, x: VariableOrDefer):
             if x.bus_size != 1:
                 raise ValueError(f"Assertion variable must be boolean-like. '{x.name}' has bus size {x.bus_size}.")
             self.x = x
+            self.caller = inspect.getframeinfo(inspect.stack()[1][0])
+            if self.caller.filename == inspect.getframeinfo(inspect.stack()[0][0]).filename:
+                self.caller = inspect.getframeinfo(inspect.stack()[2][0])
             _assertion_list.append(self)
         def get_smt2_assertion(self) -> str:
             '''Returns the assertion in SMTLIB2 format'''
             return (
                 "(push)\n"
-                + f"(assert (= {self.x.name} #b0)) ; Should fail.\n"
+                "(echo \""
+                f"       # Checking assertion from {self.caller.filename.replace('"',"")}:{self.caller.lineno}"
+                "\")\n"
+                f"(assert (= {self.x.name} #b0)) ; Should fail.\n"
                 "(check-sat)\n"
                 ";(get-model)\n"
                 "(pop)\n"
@@ -634,6 +682,10 @@ class Verif:
     def AssertEqual(lhs: VariableOrDefer, rhs: VariableOrDefer) -> Assert:
         '''Syntaxic sugar for Assert(Equal(a,b))'''
         return Verif.Assert(Verif.Equal(lhs, rhs))
+    @staticmethod
+    def AssertImply(lhs: VariableOrDefer, rhs: VariableOrDefer) -> Assert:
+        '''Syntaxic sugar for Assert(Imply(a,b))'''
+        return Verif.Assert(Verif.Imply(lhs, rhs))
     @staticmethod
     def _assert_sugar_op(lhs: VariableOrDefer, rhs: VariableOrDefer, signed: bool,
                          fun_int: type[_Binop], fun_svb: type[_Binop], fun_ubv: type[_Binop]) -> Assert:
@@ -720,8 +772,12 @@ def get_smtlib2_model(model_depth: int) -> str:
         "; Netlist model\n"
         + "".join(x.get_smt2_decl(model_depth) for x in _input_list + _equation_list)
         + "".join("".join(x.get_smt2_equation(i, model_depth-1) for x in _equation_list) for i in range(model_depth))
+        + "( echo \"Checking the netlist itself is well-formed. Should always answer 'sat'.\")\n"
         + "(check-sat) ; Should never fail. The netlist itself should be well-formed.\n"
         + ("; User assertions\n" if len(_assertion_list) > 0 else "")
+        + "( echo \"###########################################################\")\n"
+        + "( echo \"Now checking circuit assertions. Should all return 'unsat'.\")\n"
+        + "( echo \"###########################################################\")\n"
         + "".join(x.get_smt2_assertion() for x in _assertion_list)
     )
 
