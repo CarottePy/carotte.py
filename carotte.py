@@ -41,9 +41,11 @@ def process(module_file: str, output_filename: str | None, smart_names: bool,
     module_name = re.sub("\\.py$", "", module_name)
     try:
         module = __import__(module_name)
-    except ModuleNotFoundError:
-        print(f"Could not load file '{module_file}'", file=sys.stderr)
-        sys.exit(1)
+    except ModuleNotFoundError as exc:
+        if exc.name == module_name and exc.path is None:
+            print(f"Could not load file '{module_file}'", file=sys.stderr)
+            sys.exit(1)
+        raise exc
     if smart_names and assignhooks is not None:
         assignhooks.patch_module(module) # type: ignore
     module.main() # type: ignore
