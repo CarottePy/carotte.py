@@ -226,7 +226,7 @@ class Constant(EquationVariable):
         return f"{self.name} = {self.value}"
     def get_smt2_equation(self, depth: int, max_depth: int) -> str:
         value_cleaned = self.value.replace("t","1").replace("f","0")
-        return f"(assert (= {_smt2_name(self, depth)} #b{value_cleaned}))\n"
+        return f"(assert (= {_smt2_name(self, depth)} #b{value_cleaned[::-1]}))\n"
 
 class Unop(EquationVariable):
     '''Netlist unary operations on variables'''
