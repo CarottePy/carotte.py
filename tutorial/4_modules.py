@@ -19,10 +19,10 @@ def main() -> None:
 # Expected output:
 # INPUT a, b, c
 # OUTPUT r, out_c
-# VAR a, b, c, _l_3, r, _l_5, _l_6, out_c
+# VAR a, b, c, tmp, r, _l_5, _l_6, out_c
 # IN
-# _l_3 = XOR a b
-# r = XOR _l_3 c
-# _l_5 = AND _l_3 c
+# tmp = XOR a b
+# r = XOR tmp c
+# _l_5 = AND tmp c
 # _l_6 = AND a b
 # out_c = OR _l_5 _l_6

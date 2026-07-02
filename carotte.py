@@ -39,6 +39,8 @@ def process(module_file: str, output_filename: str | None, smart_names: bool,
     module_dir, module_name = os.path.split(os.path.abspath(module_file))
     sys.path.append(module_dir)
     module_name = re.sub("\\.py$", "", module_name)
+    if smart_names and assignhooks is not None:
+        assignhooks.instrument.start([module_dir])
     try:
         module = __import__(module_name)
     except ModuleNotFoundError as exc:
@@ -47,7 +49,7 @@ def process(module_file: str, output_filename: str | None, smart_names: bool,
             sys.exit(1)
         raise exc
     if smart_names and assignhooks is not None:
-        assignhooks.patch_module(module) # type: ignore
+        assignhooks.instrument.stop() # type: ignore
     module.main() # type: ignore
 
     netlist = lib_carotte.get_netlist(prune=prune)
