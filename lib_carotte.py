@@ -3,6 +3,7 @@
 
 '''Carotte library internals'''
 
+import abc
 import inspect
 import sys
 import typing
@@ -44,17 +45,51 @@ def get_and_increment_equation_counter() -> int:
     _equation_counter += 1
     return old_value
 
-class Variable(typing.Sequence['Variable']):
+class VariableOrDefer(typing.Sequence['VariableOrDefer'], abc.ABC):
     '''The basis of carotte.py: netlist variables core'''
-    def __init__(self, name: str, bus_size: int, autogen_name: bool, in_netlist: bool):
-        assert name not in _name_set
+    @abc.abstractmethod
+    def __init__(self, bus_size: int, autogen_name: bool, in_netlist: bool) -> None:
         assert not(in_netlist) or bus_size >= 0
+        self.bus_size = bus_size
+        self.autogen_name = autogen_name
+        self.in_netlist = in_netlist # Verification variable are abstract and not wanted in the netlist
+
+    @property
+    @abc.abstractmethod
+    def name(self) -> str:
+        """Returns the VariableOrDefer name. Cannot be a mere self.name due to Defer."""
+
+    def __and__(self, rhs: 'VariableOrDefer') -> 'Variable':
+        return And(self, rhs)
+    def __or__(self, rhs: 'VariableOrDefer') -> 'Variable':
+        return Or(self, rhs)
+    def __xor__(self, rhs: 'VariableOrDefer') -> 'Variable':
+        return Xor(self, rhs)
+    def __invert__(self) -> 'Variable':
+        return Not(self)
+    def __len__(self) -> int:
+        return self.bus_size
+    def __getitem__(self, index: typing.Union[int, slice]) -> 'Variable':
+        if isinstance(index, slice):
+            if (index.step is not None) and (index.step != 1):
+                raise TypeError(f"Slices must use a step of '1' (have {index.step})")
+            start = 0 if index.start is None else index.start
+            stop = self.bus_size if index.stop is None else index.stop
+            return Slice(start, stop, self)
+        if isinstance(index, int):
+            return Select(index, self)
+        raise TypeError(f"Invalid getitem, index: {index} is neither a slice or an integer")
+    def __add__(self, rhs: 'VariableOrDefer') -> 'Variable':
+        return Concat(self, rhs)
+
+class Variable(VariableOrDefer):
+    '''Regular netlist variables'''
+    def __init__(self, name: str, bus_size: int, autogen_name: bool, in_netlist: bool):
+        super().__init__(bus_size, autogen_name, in_netlist)
+        assert name not in _name_set
         self._validate_name(name)
         _name_set.add(name)
-        self.name = name
-        self.autogen_name = autogen_name
-        self.bus_size = bus_size
-        self.in_netlist = in_netlist # Verification variable are abstract and not wanted in the netlist
+        self._name = name
     def set_as_output(self, name: typing.Optional[str] = None) -> None:
         '''Sets this variable as a netlist OUTPUT'''
         if not self.in_netlist:
@@ -62,6 +97,9 @@ class Variable(typing.Sequence['Variable']):
         if name is not None:
             self.rename(name)
         _output_list.append(self)
+    @property
+    def name(self) -> str:
+        return self._name
     def get_full_name(self) -> str:
         '''Returns the full name of this variable for the VARIABLE part of the netlist'''
         if self.bus_size == 1:
@@ -92,7 +130,7 @@ class Variable(typing.Sequence['Variable']):
             self._validate_name(new_name)
             _name_set.remove(self.name)
             _name_set.add(new_name)
-            self.name = new_name
+            self._name = new_name
             self.autogen_name = autogen_name
 
     def try_rename(self, new_name: str, autogen_name: bool = False) -> bool:
@@ -133,37 +171,12 @@ class Variable(typing.Sequence['Variable']):
                 new_name = '_' + lhs_name + '_' + str(get_and_increment_equation_counter())
             self.try_rename(new_name)
 
-    def __and__(self, rhs: 'Variable') -> 'Variable':
-        return And(self, rhs)
-    def __or__(self, rhs: 'Variable') -> 'Variable':
-        return Or(self, rhs)
-    def __xor__(self, rhs: 'Variable') -> 'Variable':
-        return Xor(self, rhs)
-    def __invert__(self) -> 'Variable':
-        return Not(self)
-    def __len__(self) -> int:
-        return self.bus_size
-    def __getitem__(self, index: typing.Union[int, slice]) -> 'Variable':
-        if isinstance(index, slice):
-            if (index.step is not None) and (index.step != 1):
-                raise TypeError(f"Slices must use a step of '1' (have {index.step})")
-            start = 0 if index.start is None else index.start
-            stop = self.bus_size if index.stop is None else index.stop
-            return Slice(start, stop, self)
-        if isinstance(index, int):
-            return Select(index, self)
-        raise TypeError(f"Invalid getitem, index: {index} is neither a slice or an integer")
-    def __add__(self, rhs: 'Variable') -> 'Variable':
-        return Concat(self, rhs)
-
-class Defer:
+class Defer(VariableOrDefer):
     '''For handling loops in variable declarations'''
     def __init__(self, bus_size: int, lazy_val: typing.Callable[[], Variable], in_netlist: bool = True):
+        super().__init__(bus_size, True, in_netlist)
         self.val: typing.Optional[Variable] = None
         self.lazy_val = lazy_val
-        self.bus_size = bus_size
-        self.autogen_name = True
-        self.in_netlist = in_netlist
         _unevaluated_defer_set.add(self)
     def get_val(self) -> Variable:
         '''Helper to resolve the variable value once the loop issue has been solved'''
@@ -176,8 +189,6 @@ class Defer:
     def name(self) -> str:
         '''We want to compute the variable name lazily'''
         return self.get_val().name
-
-VariableOrDefer = typing.Union[Variable, Defer]
 
 def _smt2_name(x: VariableOrDefer | str, depth: int) -> str:
     if not isinstance(x, str):
