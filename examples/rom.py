@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: CC0-1.0
 # carotte.py by Twal, hbens & more
 
-'''Simple ROM example'''
+"""Simple ROM example"""
 
 from lib_carotte import *
 
 
 def main() -> None:
-    '''Entry point of this example'''
+    """Entry point of this example"""
     addr_size = 2
     word_size = 4
     read_addr = Input(addr_size)
